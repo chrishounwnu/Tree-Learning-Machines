@@ -1,0 +1,363 @@
+---
+title: "Tree Learning Machines - Basics"
+author: "Christophe HOUNWANOU"
+date: '2024-07-12'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Fundamentals of Tree Learning
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{R}
+
+   library(rpart)
+   library(rpart.plot)
+   library(MASS)
+   library(tree)
+
+```
+
+## Elements of Tree Learning
+
+Exploration of the idiosyncratic predictable power of each of the explanatory variable.
+This exploration is done using analysis of variance and comparative boxplots in the classification.
+The same is done in regression analysis using scatterplots. Correlation plots can also be
+used to gain quick insights.
+
+
+```{R}
+   
+   xy <- Pima.tr[,ncol(Pima.tr):1]
+
+   colnames(xy)[1] <- 'Y'
+
+   p   <- ncol(xy)-1
+   n   <- nrow(xy)
+   pos <- 1
+   
+   
+   head(xy)
+
+```
+
+What does each variable look like?
+
+```{R}
+
+   library(corrplot)
+
+   pairs(xy[,-pos])
+   
+   corrplot(cor(xy[,-pos]))
+   
+```
+
+Exploration starts here
+
+```{R}
+   
+   par(mfrow=c(3,3))
+   for(j in 1:p)
+   {
+     boxplot(xy[,j+1]~xy[,1], xlab='Diabetes', 
+             ylab=colnames(xy)[j+1], col=3:4)
+   }
+
+```
+
+Building a few trees should help tremendously
+
+````markdown
+    `r ''`
+    ```
+    tree(formula, data, weights, subset,
+    na.action = na.pass, control = tree.control(nobs, ...),
+    method = "recursive.partition",
+    split = c("deviance", "gini"),
+    model = FALSE, x = FALSE, y = TRUE, wts = TRUE, ...)
+    ```
+````
+
+As we can see, "deviance" is the default node splitting criterion.
+
+```{R}
+
+   tree.xy <- tree(Y~., data=xy, split='deviance')
+   
+   plot(tree.xy)
+   text(tree.xy)
+
+   print(tree.xy)
+```
+
+We can certainly use "gini" explicitly as the node splitting criterion. 
+
+```{R}
+
+   tree.xy <- tree(Y~., data=xy, split='gini')
+   
+   plot(tree.xy)
+   text(tree.xy)
+   
+   print(tree.xy)
+
+```
+
+
+Building a tree on the same data using a different R Package
+
+```{R}
+
+   rpart.xy <- rpart(Y~., data=xy)
+  
+   plot(rpart.xy)
+   text(rpart.xy)
+   
+   prp(rpart.xy)
+  
+   rpart.plot(rpart.xy)
+
+   length(which(rpart.xy$frame$var=='<leaf>'))
+   
+   print(rpart.xy)
+
+```
+## Computational demonstration of the instability of trees
+
+Here we use the bootstrap on the original training set, to create several random samples
+from the original sample, after which trees are built. It can be seen that for each bootstrap
+sample, the corresponding tree changes a lot from the others both in complexity (number of leaves [terminal nodes]) and qualitative structure.
+
+```{R}
+
+   tree.comp <- NULL
+   R <- 450
+   
+   par(mfrow=c(3,3))
+   for(r in 1:R)
+   {
+      xy.boot <- xy[sample(nrow(xy), replace=T), ]  # Bootstrap sample
+      tree.xy.boot <- rpart(Y~., data=xy.boot)
+      tree.size <- length(which(tree.xy.boot$frame$var=='<leaf>'))
+      tree.comp <- c(tree.comp, tree.size)
+      
+      if(r<=9)
+      {
+         #plot(tree.xy.boot, main=paste('Tree Size =', tree.size))
+         #text(tree.xy.boot)
+        prp(tree.xy.boot, main=paste('Tree Size =', tree.size))
+      }
+   }   
+   
+   hist(tree.comp)
+   
+```
+## Rectangular Representation of Tree Learning Machines
+
+```{R}
+
+   xy <- iris
+  
+   prop.train <- 2/3 
+   id.train   <- sample(1:nrow(iris), prop.train * nrow(iris))
+   xy.tr      <- iris[id.train,]
+   xy.te      <- iris[-id.train,]
+  
+   library(tree)
+  
+   tree.model <- tree(Species ~ Sepal.Width + Petal.Width, 
+                      data=xy.tr)
+    
+   plot(iris$Petal.Width, iris$Sepal.Width, 
+        pch=19, col=as.numeric(iris$Species), 
+        xlab='Petal Width', ylab='Sepal Width')
+   partition.tree(tree.model, label="Species", add=TRUE)
+   legend("topright",inset=0.02, legend=unique(iris$Species), 
+          col=unique(as.numeric(iris$Species)), pch=19)
+
+#  Exploration of a few observations in the iris data
+   
+   head(iris[sample(nrow(iris)),3:5])
+  
+```
+
+Exploring the iris data even more
+
+```{R}
+
+   #  Beautiful plotting of tree classifier
+   
+   library(rpart)
+   library(rpart.plot)
+   
+   tree.mod <- rpart(Species ~ Sepal.Width + Petal.Width, 
+                      data=xy.tr)
+   
+   prp(tree.mod)
+   
+   #rpart.plot(tree.mod)
+
+   nodes <- as.numeric(rownames(tree.mod$frame))
+   max(rpart:::tree.depth(nodes))
+   
+#  Comparative boxplots for each iris data variable
+   
+   
+   par(mfrow=c(2,2))
+   for(j in 1:4)
+   {
+     boxplot(iris[,j]~iris[,5], xlab='Iris Type', ylab=colnames(iris)[j],
+             main=colnames(iris)[j], col=2:4)
+   }   
+   
+#  Pairwise scatterplot on the iris data with colored labels
+   
+   plot(iris[,-5], col=1+as.numeric(iris[,5]))
+
+```
+
+## Contours and Rectangles
+
+Plotting the decision boundary in 2D
+
+```{R}
+
+   xy <- read.csv('banana-shaped-data-1.csv')   
+   colors <- 1+as.numeric(xy$y)
+   
+   
+   plot(xy[,-3], pch=19, col=colors, 
+        xlab=expression(X[1]), ylab=expression(X[2]))
+   
+   xy$y <- ifelse(xy$y==1, 'pros','cons')
+   xy$y <- as.factor(xy$y)
+   
+   tree.xy <- tree(as.factor(y)~., data=xy)
+   
+  
+   plot(xy[,-3], pch=19, col=colors, 
+        xlab=expression(X[1]), ylab=expression(X[2]))
+   partition.tree(tree.xy, label="y", add=TRUE)
+   legend("topright",inset=0.02, legend=unique(xy$y), 
+          col=unique(as.numeric(xy$y)), pch=19)
+  
+   prp(rpart(as.factor(y)~., data=xy))
+   
+   rpart.plot(rpart(as.factor(y)~., data=xy))
+
+
+```
+
+#  Exercises
+   
+   #xy <- read.csv('four-corners-data-1.csv')
+   #Other data sets
+   #Prove unbiased unbiased of tree learning machines
+   #Show that tree learners approximate Bayes learner
+   #Discuss different loss functions
+   #Discuss the variance of tree learners
+   #Argue on probabilistic inequalities for tree learners
+   #Discuss tree pruning
+   #Discuss tree learning machines for large p small n
+#
+#
+
+## Regression Tree Learning Machines
+
+```{R}
+
+   xy <- read.csv('spam.csv')
+   xy <- read.csv('sinc.csv')   
+   
+   xy <- mtcars[,c(1, 3, 6)]
+   
+   tree.xy <- tree(mpg~disp+wt, data=xy)
+   rpart.xy <- rpart(mpg~disp+wt, data=xy)
+   par(mfrow=c(1,2))
+   plot(xy$disp, xy$wt, pch=19, col='blue', xlab='disp', ylab='wt')
+   partition.tree(tree.xy, ordvars=c('disp','wt'), add=TRUE)
+   prp(rpart.xy)
+   
+   xy <- read.csv('sinc.csv')   
+   
+   tree.xy <- tree(y~., data=xy)
+   rpart.xy <- rpart(y~., data=xy)
+   par(mfrow=c(1,2))
+   plot(xy$x, xy$y, pch=19, col='blue', xlab=expression(X), ylab=expression(Y))
+   partition.tree(tree.xy, ordvars=c('x'), add=TRUE)
+   prp(rpart.xy)
+   
+```
+
+## Pruning Trees
+
+```{R}
+   
+     data(fgl, package="MASS")
+
+
+     pp1 <- ncol(fgl)
+     p <- pp1 - 1
+     
+     library(corrplot)
+     corrplot(cor(fgl[,-pp1]))
+
+     par(mfrow=c(3,3))
+     for(j in 1:p)
+     {
+       boxplot(fgl[,j]~fgl[,p+1], 
+       col=1:length(unique(fgl[,p+1])),
+       main=colnames(fgl)[j])  
+     }
+```
+
+# Plot the tree
+
+```{R}
+   
+    fgl.tr <- tree(type ~ ., fgl)
+     
+    plot(print(fgl.tr))
+    text(fgl.tr)
+
+```
+# Actual prunning
+
+```{R}
+
+   
+     fgl.cv <- cv.tree(fgl.tr,, prune.tree)
+     
+     for(i in 2:5)  fgl.cv$dev <- fgl.cv$dev +
+        cv.tree(fgl.tr,, prune.tree)$dev
+     
+     fgl.cv$dev <- fgl.cv$dev/5
+
+     plot(fgl.cv)
+   
+```
+
+# Another example to Plot the tree
+
+```{R}
+   
+    library(rpart)
+
+    tree.fgl <- rpart(type ~ ., fgl)
+     
+    plot(tree.fgl)
+    text(tree.fgl)
+
+    library(rpart.plot)
+    
+    prp(tree.fgl)
+    
+   # rpart.plot(tree.fgl)
+```
